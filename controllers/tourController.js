@@ -1,84 +1,103 @@
-const fs = require('fs');
 const Tour = require('../models/tourModel');
 
-const tours = JSON.parse(
-  fs.readFileSync(`${__dirname}/../dev-data/data/tours-simple.json`)
-);
+exports.getAllTours = async (req, res) => {
+  try {
+    // BUILD QUERY
 
-exports.checkID = (req, res, next, value) => {
-  if (req.params.id * 1 > tours.length) {
-    // RETURN FROM MIDDLEWARE TO END THE MIDDLEWARE CALLSTACK
-    return res.status(404).json({
+    // 1) Filtering
+    // Create shallow copy of req.query obj and exclude special fields
+    const queryObj = { ...req.query };
+    const excludedFields = ['page', 'sort', 'limit', 'fields'];
+    excludedFields.forEach((el) => delete queryObj[el]);
+
+    // 2) Advanced filtering for special query commands
+    let queryStr = JSON.stringify(queryObj);
+    queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, (match) => `$${match}`);
+
+    const query = Tour.find(JSON.parse(queryStr));
+
+    // EXECUTE QUERY
+    const tours = await query;
+    // {difficulty: 'easy', 'duration': { $gte: 5 }} <- filter obj
+
+    // SEND RESPONSE
+    res.status(200).json({
+      status: 'success',
+      results: tours.length,
+      data: { tours: tours },
+    });
+  } catch (err) {
+    res.status(404).json({
       status: 'fail',
-      requestedAt: req.requestTime,
-      message: 'Invalid ID',
+      message: err,
     });
   }
-
-  next();
 };
 
-exports.checkBody = (req, res, next) => {
-  if (!req.body.name || !req.body.price) {
-    return res.status(400).json({
+exports.getTour = async (req, res) => {
+  try {
+    const tour = await Tour.findOne({ _id: req.params.id });
+    res.status(200).json({
+      status: 'success',
+      data: { tour: tour },
+    });
+  } catch (err) {
+    res.status(404).json({
       status: 'fail',
-      message: 'Missing name or price',
+      message: err,
     });
   }
-
-  next();
 };
 
-exports.getAllTours = (req, res) => {
-  // Modified data using JSent specification
-  res.status(200).json({
-    status: 'success',
-    results: tours.length,
-    data: { tours: tours },
-  });
+exports.createTour = async (req, res) => {
+  try {
+    const tour = await Tour.create(req.body);
+
+    res.status(201).json({
+      status: 'success',
+      data: { tour: tour },
+    });
+  } catch (err) {
+    res.status(400).json({
+      status: 'fail',
+      message: 'Invalid data sent!',
+    });
+  }
 };
 
-exports.getTour = (req, res) => {
-  // Modified data using JSent specification
-  const tour = tours.find((el) => el.id === req.params.id * 1);
+exports.updateTour = async (req, res) => {
+  try {
+    const tour = await Tour.findOneAndUpdate({ _id: req.params.id }, req.body, {
+      new: true,
+      runValidators: true,
+    });
 
-  res.status(200).json({
-    status: 'success',
-    requestedAt: req.requestTime,
-    data: { tour: tour },
-  });
+    res.status(200).json({
+      status: 'success',
+      data: {
+        tour: tour,
+      },
+    });
+  } catch (err) {
+    res.status(400).json({
+      status: 'fail',
+      message: 'Invalid data sent!',
+    });
+  }
 };
 
-exports.createTour = (req, res) => {
-  //   console.log(req.body);
-  const id = tours[tours.length - 1].id + 1;
-  const newTour = { id: id, ...req.body };
+exports.deleteTour = async (req, res) => {
+  try {
+    await Tour.findByIdAndDelete(req.params.id);
 
-  tours.push(newTour);
-  fs.writeFile(
-    `${__dirname}/dev-data/data/tours-simple`,
-    JSON.stringify(tours),
-    (err) => {
-      res.status(201).json({
-        status: 'success',
-        data: { tour: newTour },
-      });
-    }
-  );
-};
-
-exports.updateTour = (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    data: {
-      tour: '<Updated tour here...>',
-    },
-  });
-};
-
-exports.deleteTour = (req, res) => {
-  res.status(204).json({
-    status: 'success',
-    data: null,
-  });
+    res.status(204).json({
+      status: 'success',
+      data: null,
+    });
+  } catch (err) {
+    res.status(404).json({
+      status: 'fail',
+      message: 'Invalid data sent!',
+    });
+  }
 };
